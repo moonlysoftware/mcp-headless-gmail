@@ -35,6 +35,72 @@ cd mcp-headless-gmail
 pip install -e .
 ```
 
+## Docker
+
+### Building the Docker Image
+
+```bash
+# Build the Docker image
+docker build -t mcp-headless-gmail .
+```
+
+### Running with Docker
+
+```bash
+# Run the server in a Docker container
+docker run -p 8080:8080 mcp-headless-gmail
+```
+
+For persistent configurations, you can mount a volume:
+
+```bash
+# Run with a mounted volume for configuration
+docker run -p 8080:8080 -v $(pwd)/config:/app/config mcp-headless-gmail
+```
+
+## Usage with Claude Desktop
+
+### Docker Usage
+
+You can configure Claude Desktop to use the Docker image by adding the following to your Claude configuration:
+
+```json
+{
+  "mcpServers": {
+    "gmail": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "buryhuang/mcp-headless-gmail:latest"
+      ]
+    }
+  }
+}
+```
+
+Note: With this configuration, you'll need to provide your Google API credentials in the tool calls as shown in the [Using the Tools](#using-the-tools) section. Gmail credentials are not passed as environment variables to maintain separation between credential storage and server implementation.
+
+## Cross-Platform Publishing
+
+To publish the Docker image for multiple platforms, you can use the `docker buildx` command. Follow these steps:
+
+1. **Create a new builder instance** (if you haven't already):
+   ```bash
+   docker buildx create --use
+   ```
+
+2. **Build and push the image for multiple platforms**:
+   ```bash
+   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t buryhuang/mcp-headless-gmail:latest --push .
+   ```
+
+3. **Verify the image is available for the specified platforms**:
+   ```bash
+   docker buildx imagetools inspect buryhuang/mcp-headless-gmail:latest
+   ```
+
 ## Usage
 
 The server provides Gmail functionality through MCP tools. Authentication handling is simplified with a dedicated token refresh tool.
