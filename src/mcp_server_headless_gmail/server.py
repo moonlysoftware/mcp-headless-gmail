@@ -124,6 +124,9 @@ class GmailClient:
         Args:
             max_results: Maximum number of emails to return (default: 10)
             unread_only: Whether to return only unread emails (default: False)
+            
+        Returns:
+            JSON string with an array of emails containing metadata and snippets (not full bodies)
         """
         try:
             # Check if service is initialized
@@ -185,23 +188,6 @@ class GmailClient:
                     else:
                         logger.debug(f"Message {message['id']} missing payload or headers fields: {json.dumps(msg)[:200]}...")
                     
-                    # Extract message body
-                    body = ""
-                    if 'payload' in msg:
-                        logger.debug(f"Processing payload for message {message['id']}")
-                        if 'body' in msg['payload'] and 'data' in msg['payload']['body']:
-                            logger.debug("Found body data directly in payload")
-                            body = base64.urlsafe_b64decode(msg['payload']['body']['data']).decode('utf-8')
-                        elif 'parts' in msg['payload']:
-                            logger.debug(f"Message has {len(msg['payload']['parts'])} parts, looking for text/plain")
-                            for part in msg['payload']['parts']:
-                                if part['mimeType'] == 'text/plain' and 'body' in part and 'data' in part['body']:
-                                    logger.debug("Found text/plain part with data")
-                                    body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
-                                    break
-                        else:
-                            logger.debug(f"Message {message['id']} has no recognizable body format")
-                    
                     # Format the email
                     email_data = {
                         "id": msg['id'],
@@ -212,7 +198,6 @@ class GmailClient:
                         "to": headers.get('to', ''),
                         "subject": headers.get('subject', ''),
                         "date": headers.get('date', ''),
-                        "body": body,
                         "internalDate": msg.get('internalDate', '')
                     }
                     
@@ -328,7 +313,7 @@ async def main():
             ),
             types.Tool(
                 name="gmail_get_recent_emails",
-                description="Get the most recent emails from Gmail",
+                description="Get the most recent emails from Gmail (returns metadata and snippets, not full email bodies)",
                 inputSchema={
                     "type": "object",
                     "properties": {
