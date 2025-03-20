@@ -1,11 +1,11 @@
 # MCP Headless Gmail Server
 
-This is a simple MCP (Multi-Agent Conversation Protocol) server that provides Gmail API functionality. This server allows you to interact with Gmail through MCP-compatible clients.
+A MCP (Model Context Protocol) server that provides get, send Gmails without local credential or token setup.
 
 ## Why MCP Headless Gmail Server?
 ### Critical Advantages
-- **Headless & Remote Operation**: Unlike other Gmail solutions that require a login page and local file access, this server can run completely headless in remote environments.
-- **Decoupled Architecture**: Any application can complete the OAuth flow independently, then pass credentials as context to this MCP server, creating a complete separation between credential storage and server implementation.
+- **Headless & Remote Operation**: Unlike other MCP Gmail solutions that require running outside of docker and local file access, this server can run completely headless in remote environments with no browser no local file access.
+- **Decoupled Architecture**: Any client can complete the OAuth flow independently, then pass credentials as context to this MCP server, creating a complete separation between credential storage and server implementation.
 
 ### Nice but not critical
 - **Focused Functionality**: In many use cases, especially for marketing applications, only Gmail access is needed without additional Google services like Calendar, making this focused implementation ideal.
