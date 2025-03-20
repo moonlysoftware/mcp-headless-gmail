@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A simple Gmail MCP server"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["mcp>=1.4.1", "python-dotenv>=1.0.1", "google-api-python-client>=2.127.0", "google-auth>=2.34.0", "google-auth-oauthlib>=1.2.0", "google-auth-httplib2>=0.2.0"]
+dependencies = ["mcp>=1.4.1", "python-dotenv>=1.0.1", "google-api-python-client>=2.127.0", "google-auth>=2.34.0", "google-auth-oauthlib>=1.2.0", "google-auth-httplib2>=0.2.0", "python-dateutil>=2.8.2"]
 
 [build-system]
 requires = ["hatchling"]

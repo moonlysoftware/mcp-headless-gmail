@@ -44,20 +44,6 @@ pip install -e .
 docker build -t mcp-headless-gmail .
 ```
 
-### Running with Docker
-
-```bash
-# Run the server in a Docker container
-docker run -p 8080:8080 mcp-headless-gmail
-```
-
-For persistent configurations, you can mount a volume:
-
-```bash
-# Run with a mounted volume for configuration
-docker run -p 8080:8080 -v $(pwd)/config:/app/config mcp-headless-gmail
-```
-
 ## Usage with Claude Desktop
 
 ### Docker Usage
