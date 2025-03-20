@@ -20,7 +20,13 @@ from googleapiclient.errors import HttpError
 import google.oauth2.credentials
 import google.auth.exceptions
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger('mcp_server_headless_gmail')
+logger.setLevel(logging.DEBUG)
 
 def convert_datetime_fields(obj: Any) -> Any:
     """Convert any datetime or tzlocal objects to string in the given object"""
@@ -39,8 +45,8 @@ def convert_datetime_fields(obj: Any) -> Any:
 class GmailClient:
     def __init__(self, access_token: Optional[str] = None, refresh_token: Optional[str] = None, 
                  client_id: Optional[str] = None, client_secret: Optional[str] = None):
-        if not refresh_token:
-            raise ValueError("Refresh token is required")
+        if not access_token and not refresh_token:
+            raise ValueError("Either access_token or refresh_token must be provided")
         
         # Create credentials from the provided tokens
         self.credentials = google.oauth2.credentials.Credentials(
@@ -73,6 +79,12 @@ class GmailClient:
             client_id: Google OAuth2 client ID
             client_secret: Google OAuth2 client secret
         """
+        if not self.credentials.refresh_token:
+            return json.dumps({
+                "error": "No refresh token provided",
+                "status": "error"
+            })
+            
         try:
             # Set client_id and client_secret for refresh
             self.credentials._client_id = client_id
@@ -106,15 +118,17 @@ class GmailClient:
                 "status": "error"
             })
 
-    def get_recent_emails(self, max_results: int = 10) -> str:
+    def get_recent_emails(self, max_results: int = 10, unread_only: bool = False) -> str:
         """Get the most recent emails from Gmail
         
         Args:
             max_results: Maximum number of emails to return (default: 10)
+            unread_only: Whether to return only unread emails (default: False)
         """
         try:
             # Check if service is initialized
             if not hasattr(self, 'service'):
+                logger.error("Gmail service not initialized. No valid access token provided.")
                 return json.dumps({
                     "error": "No valid access token provided. Please refresh your token first.",
                     "status": "error"
@@ -122,27 +136,44 @@ class GmailClient:
                 
             # Define the operation
             def _operation():
+                logger.debug(f"Fetching up to {max_results} recent emails from Gmail")
+                
                 # Get list of recent messages
-                response = self.service.users().messages().list(
-                    userId='me',
-                    maxResults=max_results,
-                    labelIds=['INBOX'],
-                    q='is:unread'  # Get unread messages by default
-                ).execute()
+                query = 'is:unread' if unread_only else ''
+                logger.debug(f"Calling Gmail API to list messages from INBOX with query: '{query}'")
+                
+                try:
+                    response = self.service.users().messages().list(
+                        userId='me',
+                        maxResults=max_results,
+                        labelIds=['INBOX'],
+                        q=query
+                    ).execute()
+                    
+                    logger.debug(f"API Response received: {json.dumps(response)[:200]}...")
+                except Exception as e:
+                    logger.error(f"Error calling Gmail API list: {str(e)}", exc_info=True)
+                    return json.dumps({"error": f"Gmail API list error: {str(e)}"})
                 
                 messages = response.get('messages', [])
                 
                 if not messages:
+                    logger.debug("No messages found in the response")
                     return json.dumps({"emails": []})
+                
+                logger.debug(f"Found {len(messages)} messages, processing details")
                 
                 # Fetch detailed information for each message
                 emails = []
-                for message in messages:
+                for i, message in enumerate(messages):
+                    logger.debug(f"Fetching details for message {i+1}/{len(messages)}, ID: {message['id']}")
                     msg = self.service.users().messages().get(
                         userId='me',
                         id=message['id'],
                         format='full'
                     ).execute()
+                    
+                    logger.debug(f"Message {message['id']} details received, extracting fields")
                     
                     # Extract headers
                     headers = {}
@@ -151,17 +182,25 @@ class GmailClient:
                             name = header.get('name', '').lower()
                             if name in ['from', 'to', 'subject', 'date']:
                                 headers[name] = header.get('value', '')
+                    else:
+                        logger.debug(f"Message {message['id']} missing payload or headers fields: {json.dumps(msg)[:200]}...")
                     
                     # Extract message body
                     body = ""
                     if 'payload' in msg:
+                        logger.debug(f"Processing payload for message {message['id']}")
                         if 'body' in msg['payload'] and 'data' in msg['payload']['body']:
+                            logger.debug("Found body data directly in payload")
                             body = base64.urlsafe_b64decode(msg['payload']['body']['data']).decode('utf-8')
                         elif 'parts' in msg['payload']:
+                            logger.debug(f"Message has {len(msg['payload']['parts'])} parts, looking for text/plain")
                             for part in msg['payload']['parts']:
                                 if part['mimeType'] == 'text/plain' and 'body' in part and 'data' in part['body']:
+                                    logger.debug("Found text/plain part with data")
                                     body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
                                     break
+                        else:
+                            logger.debug(f"Message {message['id']} has no recognizable body format")
                     
                     # Format the email
                     email_data = {
@@ -177,18 +216,20 @@ class GmailClient:
                         "internalDate": msg.get('internalDate', '')
                     }
                     
+                    logger.debug(f"Successfully processed message {message['id']}")
                     emails.append(email_data)
                 
+                logger.debug(f"Successfully processed {len(emails)} emails")
                 return json.dumps({"emails": convert_datetime_fields(emails)})
             
             # Execute the operation with token refresh handling
             return self._handle_token_refresh(_operation)
             
         except HttpError as e:
-            logger.error(f"API Exception: {str(e)}")
+            logger.error(f"Gmail API Exception: {str(e)}")
             return json.dumps({"error": str(e)})
         except Exception as e:
-            logger.error(f"Exception: {str(e)}")
+            logger.error(f"Exception in get_recent_emails: {str(e)}", exc_info=True)
             return json.dumps({"error": str(e)})
     
     def send_email(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> str:
@@ -292,10 +333,10 @@ async def main():
                     "type": "object",
                     "properties": {
                         "google_access_token": {"type": "string", "description": "Google OAuth2 access token"},
-                        "google_refresh_token": {"type": "string", "description": "Google OAuth2 refresh token"},
-                        "max_results": {"type": "integer", "description": "Maximum number of emails to return (default: 10)"}
+                        "max_results": {"type": "integer", "description": "Maximum number of emails to return (default: 10)"},
+                        "unread_only": {"type": "boolean", "description": "Whether to return only unread emails (default: False)"}
                     },
-                    "required": ["google_access_token", "google_refresh_token"]
+                    "required": ["google_access_token"]
                 },
             ),
             types.Tool(
@@ -305,13 +346,12 @@ async def main():
                     "type": "object",
                     "properties": {
                         "google_access_token": {"type": "string", "description": "Google OAuth2 access token"},
-                        "google_refresh_token": {"type": "string", "description": "Google OAuth2 refresh token"},
                         "to": {"type": "string", "description": "Recipient email address"},
                         "subject": {"type": "string", "description": "Email subject"},
                         "body": {"type": "string", "description": "Email body content (plain text)"},
                         "html_body": {"type": "string", "description": "Email body content in HTML format (optional)"}
                     },
-                    "required": ["google_access_token", "google_refresh_token", "to", "subject", "body"]
+                    "required": ["google_access_token", "to", "subject", "body"]
                 },
             ),
         ]
@@ -349,29 +389,35 @@ async def main():
                 return [types.TextContent(type="text", text=results)]
             
             else:
-                # For all other tools, we need both access and refresh tokens
+                # For all other tools, we only need access token
                 access_token = arguments.get("google_access_token")
-                refresh_token = arguments.get("google_refresh_token")
                 
-                if not access_token or not refresh_token:
-                    raise ValueError("Both google_access_token and google_refresh_token are required")
+                if not access_token:
+                    raise ValueError("google_access_token is required")
                 
                 if name == "gmail_get_recent_emails":
-                    # Initialize Gmail client with just tokens
-                    gmail = GmailClient(
-                        access_token=access_token, 
-                        refresh_token=refresh_token
-                    )
-                    
-                    max_results = int(arguments.get("max_results", 10))
-                    results = gmail.get_recent_emails(max_results=max_results)
-                    return [types.TextContent(type="text", text=results)]
+                    # Initialize Gmail client with just access token
+                    logger.debug(f"Initializing Gmail client for get_recent_emails with access token: {access_token[:10]}...")
+                    try:
+                        gmail = GmailClient(
+                            access_token=access_token
+                        )
+                        logger.debug("Gmail client initialized successfully")
+                        
+                        max_results = int(arguments.get("max_results", 10))
+                        unread_only = bool(arguments.get("unread_only", False))
+                        logger.debug(f"Calling get_recent_emails with max_results={max_results} and unread_only={unread_only}")
+                        results = gmail.get_recent_emails(max_results=max_results, unread_only=unread_only)
+                        logger.debug(f"get_recent_emails result (first 200 chars): {results[:200]}...")
+                        return [types.TextContent(type="text", text=results)]
+                    except Exception as e:
+                        logger.error(f"Exception in gmail_get_recent_emails handler: {str(e)}", exc_info=True)
+                        return [types.TextContent(type="text", text=f"Error: {str(e)}")]
                     
                 elif name == "gmail_send_email":
-                    # Initialize Gmail client with just tokens
+                    # Initialize Gmail client with just access token
                     gmail = GmailClient(
-                        access_token=access_token, 
-                        refresh_token=refresh_token
+                        access_token=access_token
                     )
                     
                     to = arguments.get("to")

@@ -5,10 +5,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy the entire project
-COPY . .
+COPY . /app
 
 # Install the package
 RUN pip install --no-cache-dir -e .
 
 # Run the server
-ENTRYPOINT ["python", "-m", "mcp_server_headless_gmail"] 
+ENTRYPOINT ["mcp-server-headless-gmail"] 
