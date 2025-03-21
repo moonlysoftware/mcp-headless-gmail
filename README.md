@@ -14,7 +14,8 @@ A MCP (Model Context Protocol) server that provides get, send Gmails without loc
 
 ## Features
 
-- Get most recent emails from Gmail
+- Get most recent emails from Gmail with the first 1k characters of the body
+- Get full email body content in 1k chunks using offset parameter
 - Send emails through Gmail
 - Refresh access tokens separately
 - Automatic refresh token handling
@@ -126,24 +127,57 @@ This will return a new access token and its expiration time, which you can use f
 
 #### Getting Recent Emails
 
-With the new implementation, you only need to provide the access token and refresh token for most calls:
+Retrieves recent emails with the first 1k characters of each email body:
 
 ```json
 {
   "google_access_token": "your_access_token",
-  "google_refresh_token": "your_refresh_token",
-  "max_results": 5
+  "max_results": 5,
+  "unread_only": false
 }
 ```
 
-#### Sending an Email
+Response includes:
+- Email metadata (id, threadId, from, to, subject, date, etc.)
+- First 1000 characters of the email body
+- `body_size_bytes`: Total size of the email body in bytes
+- `contains_full_body`: Boolean indicating if the entire body is included (true) or truncated (false)
 
-Similarly, sending emails also doesn't require client credentials for every call:
+#### Getting Full Email Body Content
+
+For emails with bodies larger than 1k characters, you can retrieve the full content in chunks:
 
 ```json
 {
   "google_access_token": "your_access_token",
-  "google_refresh_token": "your_refresh_token",
+  "message_id": "message_id_from_get_recent_emails",
+  "offset": 0
+}
+```
+
+You can also get email content by thread ID:
+
+```json
+{
+  "google_access_token": "your_access_token",
+  "thread_id": "thread_id_from_get_recent_emails",
+  "offset": 1000
+}
+```
+
+The response includes:
+- A 1k chunk of the email body starting from the specified offset
+- `body_size_bytes`: Total size of the email body
+- `chunk_size`: Size of the returned chunk
+- `contains_full_body`: Boolean indicating if the chunk contains the remainder of the body
+
+To retrieve the entire email body of a long message, make sequential calls increasing the offset by 1000 each time until `contains_full_body` is true.
+
+#### Sending an Email
+
+```json
+{
+  "google_access_token": "your_access_token",
   "to": "recipient@example.com",
   "subject": "Hello from MCP Gmail",
   "body": "This is a test email sent via MCP Gmail server",
@@ -156,7 +190,7 @@ Similarly, sending emails also doesn't require client credentials for every call
 1. Start by calling the `gmail_refresh_token` tool with either:
    - Your full credentials (access token, refresh token, client ID, and client secret), or
    - Just your refresh token, client ID, and client secret if the access token has expired
-2. Use the returned new access token for subsequent `gmail_get_recent_emails` and `gmail_send_email` calls.
+2. Use the returned new access token for subsequent API calls.
 3. If you get a response indicating token expiration, call the `gmail_refresh_token` tool again to get a new token.
 
 This approach simplifies most API calls by not requiring client credentials for every operation, while still enabling token refresh when needed.
