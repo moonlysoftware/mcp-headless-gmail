@@ -21,6 +21,7 @@ import google.oauth2.credentials
 import google.auth.exceptions
 import email
 import re
+from google.auth.transport.requests import Request
 
 # Configure logging
 logging.basicConfig(
@@ -93,7 +94,8 @@ class GmailClient:
             self.credentials._client_secret = client_secret
             
             # Force refresh
-            self.credentials.refresh(None)
+            request = Request()
+            self.credentials.refresh(request)
             
             # Get token expiration time
             expiry = self.credentials.expiry
