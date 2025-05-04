@@ -1,7 +1,6 @@
 # MCP Headless Gmail Server
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/buryhuang/mcp-headless-gmail)](https://hub.docker.com/r/buryhuang/mcp-headless-gmail)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/@peakmojo/mcp-server-headless-gmail.svg)](https://www.npmjs.com/package/@peakmojo/mcp-server-headless-gmail) [![Docker Pulls](https://img.shields.io/docker/pulls/buryhuang/mcp-headless-gmail)](https://hub.docker.com/r/buryhuang/mcp-headless-gmail) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A MCP (Model Context Protocol) server that provides get, send Gmails without local credential or token setup.
 
@@ -50,10 +49,9 @@ docker build -t mcp-headless-gmail .
 
 ## Usage with Claude Desktop
 
-### Docker Usage
-
 You can configure Claude Desktop to use the Docker image by adding the following to your Claude configuration:
 
+docker
 ```json
 {
   "mcpServers": {
@@ -64,6 +62,20 @@ You can configure Claude Desktop to use the Docker image by adding the following
         "-i",
         "--rm",
         "buryhuang/mcp-headless-gmail:latest"
+      ]
+    }
+  }
+}
+```
+
+npm version
+```json
+{
+  "mcpServers": {
+    "gmail": {
+      "command": "npx",
+      "args": [
+        "@peakmojo/mcp-server-headless-gmail"
       ]
     }
   }
