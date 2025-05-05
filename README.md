@@ -4,6 +4,10 @@
 
 A MCP (Model Context Protocol) server that provides get, send Gmails without local credential or token setup.
 
+<a href="https://glama.ai/mcp/servers/@baryhuang/mcp-headless-gmail">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@baryhuang/mcp-headless-gmail/badge" alt="Headless Gmail Server MCP server" />
+</a>
+
 ## Why MCP Headless Gmail Server?
 ### Critical Advantages
 - **Headless & Remote Operation**: Unlike other MCP Gmail solutions that require running outside of docker and local file access, this server can run completely headless in remote environments with no browser no local file access.
@@ -234,4 +238,4 @@ This server requires direct access to your Google API credentials. Always keep y
 
 ## License
 
-See the LICENSE file for details. 
+See the LICENSE file for details.
