@@ -35,7 +35,7 @@ A MCP (Model Context Protocol) server that provides get, send Gmails without loc
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/mcp-headless-gmail.git
+git clone https://github.com/baryhuang/mcp-headless-gmail.git
 cd mcp-headless-gmail
 
 # Install dependencies
