@@ -38,8 +38,10 @@ const logger = new Logger('gmail-mcp');
 
 class GmailClient {
   constructor() {
+    logger.info('Initializing Gmail client');
     const accessToken = process.env.GMAIL_ACCESS_TOKEN;
     if (!accessToken) {
+      logger.error('GMAIL_ACCESS_TOKEN environment variable is not set');
       throw new Error('Access token must be provided via the GMAIL_ACCESS_TOKEN environment variable');
     }
 
