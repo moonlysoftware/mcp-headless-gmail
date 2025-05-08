@@ -5,7 +5,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { google } from 'googleapis';
 import { Buffer } from 'buffer';
-import { DateTime } from 'luxon';
 
 const logLevels = {
   ERROR: 0,
@@ -38,26 +37,17 @@ class Logger {
 const logger = new Logger('gmail-mcp');
 
 class GmailClient {
-  constructor({ accessToken, refreshToken, clientId, clientSecret } = {}) {
-    if (!accessToken && !refreshToken) {
-      throw new Error('Either accessToken or refreshToken must be provided');
+  constructor() {
+    const accessToken = process.env.GMAIL_ACCESS_TOKEN;
+    if (!accessToken) {
+      throw new Error('Access token must be provided via the GMAIL_ACCESS_TOKEN environment variable');
     }
+
     this.accessToken = accessToken;
-    this.refreshToken = refreshToken;
-    this.clientId = clientId;
-    this.clientSecret = clientSecret;
-    this.tokenUri = 'https://oauth2.googleapis.com/token';
 
-    // Always create the OAuth2 client
-    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-
-    // Set credentials if available
-    this.oauth2Client.setCredentials({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret
-    });
+    // Create the OAuth2 client
+    this.oauth2Client = new google.auth.OAuth2();
+    this.oauth2Client.setCredentials({ access_token: this.accessToken });
 
     // Create the Gmail API client with the OAuth2 client
     this.gmail = google.gmail({
@@ -66,58 +56,21 @@ class GmailClient {
     });
   }
 
-  async _handleTokenRefresh(operation) {
+  async _handleRequest(operation) {
     try {
       return await operation();
     } catch (error) {
       logger.error(`Request error: ${error.message}`);
       if (error.response) {
         const statusCode = error.response.status;
-        if (statusCode === 401) {
-          return JSON.stringify({
-            error: 'Unauthorized. Token might be expired. Try refreshing your token.',
-            details: error.message
-          });
-        } else {
-          return JSON.stringify({
-            error: `Gmail API error: ${statusCode}`,
-            details: error.message
-          });
-        }
+        return JSON.stringify({
+          error: `Gmail API error: ${statusCode}`,
+          details: error.message
+        });
       }
       return JSON.stringify({
         error: 'Request to Gmail API failed',
         details: error.message
-      });
-    }
-  }
-
-  async refreshAccessToken(clientId, clientSecret) {
-    logger.debug(`Starting refreshAccessToken with clientId=${clientId?.slice(0, 5)}...`);
-    if (!this.refreshToken) {
-      return JSON.stringify({
-        error: 'No refresh token provided',
-        status: 'error'
-      });
-    }
-    try {
-      const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-      oauth2Client.setCredentials({ refresh_token: this.refreshToken });
-      const { credentials } = await oauth2Client.refreshAccessToken();
-      this.accessToken = credentials.access_token;
-      const expiresIn = credentials.expiry_date ? Math.floor((credentials.expiry_date - Date.now()) / 1000) : 3600;
-      const expiry = credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null;
-      return JSON.stringify({
-        access_token: this.accessToken,
-        expires_at: expiry,
-        expires_in: expiresIn,
-        status: 'success'
-      });
-    } catch (error) {
-      logger.error(`Exception in refreshAccessToken: ${error.message}`);
-      return JSON.stringify({
-        error: error.message,
-        status: 'error'
       });
     }
   }
@@ -168,7 +121,7 @@ class GmailClient {
       }
       return JSON.stringify({ emails });
     };
-    return await this._handleTokenRefresh(operation);
+    return await this._handleRequest(operation);
   }
 
   extractPlainTextBody(payload) {
@@ -230,7 +183,7 @@ class GmailClient {
         labelIds: res.data.labelIds
       });
     };
-    return await this._handleTokenRefresh(operation);
+    return await this._handleRequest(operation);
   }
 
   async getEmailBodyChunk({ message_id, thread_id, offset = 0 }) {
@@ -275,7 +228,7 @@ class GmailClient {
         status: 'success'
       });
     };
-    return await this._handleTokenRefresh(operation);
+    return await this._handleRequest(operation);
   }
 }
 
@@ -288,43 +241,15 @@ async function main() {
     });
 
     server.tool(
-      'gmail_refresh_token',
-      'Refresh the access token using the refresh token and client credentials',
-      {
-        google_access_token: z.string().optional().describe('Google OAuth2 access token (optional if expired)'),
-        google_refresh_token: z.string().describe('Google OAuth2 refresh token'),
-        google_client_id: z.string().describe('Google OAuth2 client ID for token refresh'),
-        google_client_secret: z.string().describe('Google OAuth2 client secret for token refresh')
-      },
-      async ({ google_access_token, google_refresh_token, google_client_id, google_client_secret }) => {
-        try {
-          const gmail = new GmailClient({
-            accessToken: google_access_token,
-            refreshToken: google_refresh_token,
-            clientId: google_client_id,
-            clientSecret: google_client_secret
-          });
-          const result = await gmail.refreshAccessToken(google_client_id, google_client_secret);
-          return { content: [{ type: 'text', text: result }] };
-        } catch (error) {
-          return { content: [{ type: 'text', text: JSON.stringify({ error: error.message, status: 'error' }) }] };
-        }
-      }
-    );
-
-    server.tool(
       'gmail_get_recent_emails',
       'Get the most recent emails from Gmail (returns metadata, snippets, and first 1k chars of body)',
       {
-        google_access_token: z.string().describe('Google OAuth2 access token'),
         max_results: z.number().optional().describe('Maximum number of emails to return (default: 10)'),
         unread_only: z.boolean().optional().describe('Whether to return only unread emails (default: False)')
       },
-      async ({ google_access_token, max_results = 10, unread_only = false }) => {
+      async ({ max_results = 10, unread_only = false }) => {
         try {
-          const gmail = new GmailClient({
-            accessToken: google_access_token
-          });
+          const gmail = new GmailClient();
           const result = await gmail.getRecentEmails({ maxResults: max_results, unreadOnly: unread_only });
           return { content: [{ type: 'text', text: result }] };
         } catch (error) {
@@ -337,16 +262,13 @@ async function main() {
       'gmail_get_email_body_chunk',
       'Get a 1k character chunk of an email body starting from the specified offset',
       {
-        google_access_token: z.string().describe('Google OAuth2 access token'),
         message_id: z.string().optional().describe('ID of the message to retrieve'),
         thread_id: z.string().optional().describe('ID of the thread to retrieve (will get the first message if multiple exist)'),
         offset: z.number().optional().describe('Offset in characters to start from (default: 0)')
       },
-      async ({ google_access_token, message_id, thread_id, offset = 0 }) => {
+      async ({ message_id, thread_id, offset = 0 }) => {
         try {
-          const gmail = new GmailClient({
-            accessToken: google_access_token
-          });
+          const gmail = new GmailClient();
           const result = await gmail.getEmailBodyChunk({ message_id, thread_id, offset });
           return { content: [{ type: 'text', text: result }] };
         } catch (error) {
@@ -359,17 +281,14 @@ async function main() {
       'gmail_send_email',
       'Send an email via Gmail',
       {
-        google_access_token: z.string().describe('Google OAuth2 access token'),
         to: z.string().describe('Recipient email address'),
         subject: z.string().describe('Email subject'),
         body: z.string().describe('Email body content (plain text)'),
-        html_body: z.string().optional().describe('Email body content in HTML format (optional)')
+        html_body: z.string().describe('Email body content in HTML format (optional)')
       },
-      async ({ google_access_token, to, subject, body, html_body }) => {
+      async ({ to, subject, body, html_body }) => {
         try {
-          const gmail = new GmailClient({
-            accessToken: google_access_token
-          });
+          const gmail = new GmailClient();
           const result = await gmail.sendEmail({ to, subject, body, html_body });
           return { content: [{ type: 'text', text: result }] };
         } catch (error) {
@@ -387,4 +306,4 @@ async function main() {
   }
 }
 
-main(); 
+main();

@@ -1,5 +1,5 @@
 {
-  "name": "@peakmojo/mcp-server-headless-gmail",
+  "name": "@moonlysoftware/mcp-server-headless-gmail",
   "version": "0.1.0",
   "description": "A simple Gmail MCP server (no authentication flow)",
   "type": "module",
