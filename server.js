@@ -154,7 +154,7 @@ class GmailClient {
     return { body, body_size_bytes, contains_full_body };
   }
 
-  async sendEmail({ to, subject, body, html_body }) {
+  async sendEmail({ to, subject, body, html_body, in_reply_to, references }) {
     const operation = async () => {
       if (!this.gmail) {
         throw new Error('Gmail service not initialized. No valid access token provided.');
@@ -174,6 +174,12 @@ class GmailClient {
         html_body || '',
         '--boundary--'
       ];
+      if (in_reply_to) {
+        messageParts.splice(2, 0, `In-Reply-To: ${in_reply_to}`);
+      }
+      if (references) {
+        messageParts.splice(2, 0, `References: ${references}`);
+      }
       const rawMessage = Buffer.from(messageParts.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
       const res = await this.gmail.users.messages.send({
         userId: 'me',
@@ -286,12 +292,34 @@ async function main() {
         to: z.string().describe('Recipient email address'),
         subject: z.string().describe('Email subject'),
         body: z.string().describe('Email body content (plain text)'),
-        html_body: z.string().describe('Email body content in HTML format (optional)')
+        html_body: z.string().describe('Email body content in HTML format (optional)'),
       },
       async ({ to, subject, body, html_body }) => {
         try {
           const gmail = new GmailClient();
           const result = await gmail.sendEmail({ to, subject, body, html_body });
+          return { content: [{ type: 'text', text: result }] };
+        } catch (error) {
+          return { content: [{ type: 'text', text: `Error: ${error.message}` }] };
+        }
+      }
+    );
+
+    server.tool(
+      'gmail_send_reply_email',
+      'Send an reply email via Gmail',
+      {
+        to: z.string().describe('Recipient email address'),
+        subject: z.string().describe('Email subject'),
+        body: z.string().describe('Email body content (plain text)'),
+        html_body: z.string().describe('Email body content in HTML format'),
+        in_reply_to: z.string().describe('Message ID of the email being replied to'),
+        references: z.string().describe('References header for the email being replied to')
+      },
+      async ({ to, subject, body, html_body, in_reply_to, references }) => {
+        try {
+          const gmail = new GmailClient();
+          const result = await gmail.sendEmail({ to, subject, body, html_body, in_reply_to, references });
           return { content: [{ type: 'text', text: result }] };
         } catch (error) {
           return { content: [{ type: 'text', text: `Error: ${error.message}` }] };
